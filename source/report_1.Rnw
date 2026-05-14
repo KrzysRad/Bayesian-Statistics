@@ -1,0 +1,421 @@
+
+\documentclass[12pt, a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}\usepackage[utf8]{inputenc}
+\usepackage[top=2.5cm, bottom=2.5cm, left=2cm, right=2cm]{geometry}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage[colorlinks=true, linkcolor=blue]{hyperref}
+\usepackage{anyfontsize}
+\usepackage{bbm}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{Sweave}
+
+\newtheorem{theorem}{Twierdzenie}
+\newtheorem{lemma}{Lemat}
+\newtheorem{corollary}{Wniosek}
+\newtheorem{proposition}{Propozycja}
+\newtheorem{remark}{Uwaga}
+\newtheorem{note}{Notka}
+\newtheorem{fact}{Fakt}
+\newtheorem{definition}{Definicja}
+
+<<ustawienia_globalne, echo=FALSE, warning=FALSE, message=FALSE>>=
+library(xtable)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(gridExtra)
+library(factoextra)
+library(RColorBrewer)
+library(corrplot)
+@
+\begin{document}
+\title{Report 1 \\ Mathematical Statistics}
+\author{Krzysztof Radomski}
+\maketitle
+
+
+\section{Task 1}
+
+<<var_MSE, echo=FALSE, results='hide', cache=TRUE>>=
+mse_var_estimators <- function(n, theta, nsim = 10000) {
+  
+  true_var <- theta * (1 - theta)
+  
+  sims_mse <- replicate(nsim, {
+    x <- rbinom(n, size = 1, prob = theta)
+    xbar <- mean(x)
+    s2_0 <- sum((x - xbar)^2) / n
+    s2   <- sum((x - xbar)^2) / (n - 1) 
+    c(s2_0 = s2_0, s2 = s2)
+  })
+  
+  est_means <- rowMeans(sims_mse)
+  biases <- est_means - true_var
+  variances <- apply(sims_mse, 1, var)
+  mses <- variances + biases^2
+  
+  list(
+    n = n,
+    theta = theta,
+    true_var = true_var,
+    mean = est_means,
+    bias = biases,
+    var = variances,
+    mse = mses
+  )
+}
+
+params <- expand.grid(
+  n = c(10, 20, 50),
+  theta = seq(0.01, 0.99, by = 0.01) 
+)
+
+results <- apply(params, 1, function(row) {
+  n <- as.numeric(row[1])
+  theta <- as.numeric(row[2])
+  res <- mse_var_estimators(n, theta, nsim = 10000) 
+  data.frame(
+    n = n,
+    theta = theta,
+    true_var = res$true_var,
+    S2_0_mse = res$mse["s2_0"],
+    S2_mse = res$mse["s2"]
+  )
+})
+
+results <- do.call(rbind, results)
+
+
+results_long <- pivot_longer(
+  results,
+  cols = c(S2_0_mse, S2_mse), 
+  names_to = "Estimator",     
+  values_to = "MSE"          )
+@
+
+<<wykresy_MSE, echo=FALSE, fig.cap = 'MSE graphs for different parameters',fig.height= 6,fig.pos = 'H'>>=
+p1 <- ggplot(results_long %>% filter(n == 10), aes(x = theta, y = MSE, color = Estimator)) +
+  geom_line(linewidth = 1) +
+  labs(title = "MSE comparison for n = 10",
+       x = "Probability (theta)", 
+       y = "Mean Squared Error (MSE)",
+       color = "Estimator") +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "bottom")
+
+
+p2 <- ggplot(results_long %>% filter(n == 20), aes(x = theta, y = MSE, color = Estimator)) +
+  geom_line(linewidth = 1) +
+  labs(title = "MSE comparison for n = 20",
+       x = "Probability (theta)", 
+       y = "Mean Squared Error (MSE)",
+       color = "Estimator") +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "bottom")
+
+
+p3 <- ggplot(results_long %>% filter(n == 50), aes(x = theta, y = MSE, color = Estimator)) +
+  geom_line(linewidth = 1) +
+  labs(title = "MSE comparison for n = 50",
+       x = "Probability (theta)", 
+       y = "Mean Squared Error (MSE)",
+       color = "Estimator") +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "bottom")
+print(p1)
+print(p2)
+print(p3)
+@
+
+\newpage
+The first task consisted of defining a function that, for given values of $n$ and $\theta$, computes the estimated MSE (Mean Squared Error) for two variance estimators:
+$$
+S^2 = \frac{1}{n - 1} \sum_{k=1}^{n}(X_k - \bar{X})
+$$
+and
+$$
+S_0 ^2 = \frac{1}{n} \sum_{k=1}^{n} (X_k - \bar{X}),
+$$
+where $X_i \sim B(n,\theta)$. 
+
+A total of 10,000 simulations were performed for $\theta \in (0,1)$ and for several different sample sizes $n$. The plots present the estimated MSE values for both estimators. An important observation is that the same general pattern appears for all considered sample sizes, namely $n = 10$, $20$, and $50$. When $\theta$ takes values far from $\frac{1}{2}$, the MSE is larger for the unbiased estimator $S^2$. On the other hand, when $\theta$ is closer to $\frac{1}{2}$, the unbiased estimator achieves a lower MSE.
+
+Additionally, as expected, the error decreases with increasing sample size. It can also be observed that for sufficiently large $n$, both estimators perform almost equally well.
+
+In summary, the estimator $S_0^2$ generally performs better despite being biased. However, it also has a lower variance, which is particularly advantageous for smaller sample sizes. This estimator may therefore be preferable in situations where prior knowledge suggests that the parameter $\theta$ is likely to be close to $\frac{1}{2}$.
+
+\section{Task 2}
+
+The objective of this task is to analyze the estimation of the parameter $\theta \in (0,1)$, representing the probability of success in $n$ Bernoulli trials described by the binomial distribution $B(n,\theta)$. We observe the random variable $X$, corresponding to the number of successes.
+
+As a measure of estimation error, we use the entropy loss function (Kullback--Leibler divergence):
+$$
+L(\theta, d) = \theta \log\left(\frac{\theta}{d}\right) 
++ (1-\theta) \log\left(\frac{1-\theta}{1-d}\right),
+$$
+where $d$ denotes the estimator value. This function measures the "distance" between the distribution with parameter $\theta$ and the distribution with parameter $d$.
+
+We analyze the family of estimators $d_{a,b}(X)$ defined as
+$$
+d_{a,b}(X) = \frac{X + a}{n + a + b}.
+$$
+
+The risk function $R(\theta,d)$ is defined as the expected loss for a fixed value of $\theta$:
+$$
+R(\theta, d_{a,b}) = E_{\theta}\left[ L(\theta, d_{a,b}(X)) \right]
+= \sum_{x=0}^{n} L(\theta, d_{a,b}(x)) \cdot P(X=x \mid \theta),
+$$
+where $P(X=x \mid \theta)$ is the probability mass function of the binomial distribution $B(n,\theta)$.
+
+The goal of this task is to numerically compute and compare the risk functions $R(\theta, d_{a,b})$ for different sample sizes $n \in \{5,20,100\}$ in order to examine the influence of sample size on the risk of both estimators.
+
+<<ryzyko, echo=FALSE, results='hide', cache=TRUE>>=
+
+risk_entropy_da_b <- function(n, theta, a, b) {
+  
+  x <- 0:n
+  d_x <- (x + a) / (n + a + b)
+  
+  L <- theta * log(theta / d_x) + (1 - theta) * log((1 - theta) / (1 - d_x))
+  
+  p_x <- dbinom(x, size = n, prob = theta)
+  
+  R <- sum(p_x * L)
+  return(R)
+}
+
+risk_curve <- function(n, thetas, a, b) {
+  sapply(thetas, function(th) risk_entropy_da_b(n = n, theta = th, a = a, b = b))
+}
+
+n_values <- c(5, 20, 100) 
+thetas <- seq(0.01, 0.99, by = 0.01)
+param_sets <- list(
+  list(a = 1, b = 1, label = "a=1, b=1"),
+  list(a = NA, b = NA, label = "a=n/2, b=n/2 (shrink to 1/2)")
+)
+
+df_list <- list()
+for (n in n_values) {
+  for (ps in param_sets) {
+    if (is.na(ps$a)) {
+      a <- n / 2
+      b <- n / 2
+      label <- paste0("a=", n/2, ", b=", n/2) 
+    } else {
+      a <- ps$a; b <- ps$b; label <- ps$label
+    }
+    Rvals <- risk_curve(n = n, thetas = thetas, a = a, b = b)
+    df_list[[length(df_list) + 1]] <- data.frame(
+      n = n,
+      theta = thetas,
+      risk = Rvals,
+      estimator = label
+    )
+  }
+}
+df <- bind_rows(df_list)
+
+
+@
+
+<<plot_ryzyka, echo=FALSE, results='markup'>>=
+
+plot_list <- list()
+for (n_val in n_values) {
+  df_subset <- filter(df, n == n_val)
+  
+  p <- ggplot(df_subset, aes(x = theta, y = risk, color = estimator)) +
+    geom_line(linewidth = 1) +
+    labs(
+      title = paste("Risk fuction R(theta, d_{a,b}) for n =", n_val),  
+      subtitle = "Estimators comparison d_{a,b}(X) = (X+a)/(n+a+b)",
+      x = expression(theta),
+      y = "R(theta, d)",
+      color = "Estimator"
+    ) +
+    theme_minimal(base_size = 13) +
+    theme(legend.position = "bottom")
+  
+  plot_list[[paste0("n_", n_val)]] <- p
+}
+
+
+for (p in plot_list) {
+  print(p)
+}
+@
+
+
+After generating and analyzing the risk function plots for $n=5$, $n=20$, and $n=100$, the following conclusions can be drawn:
+
+\textbf{Behavior of estimator (a) ($a=1, b=1$):}  
+
+This estimator exhibits desirable properties --- its risk function remains relatively flat and low over the entire range $\theta \in (0,1)$. The risk becomes slightly higher near the boundaries (close to $0$ and $1$) than in the central region. Overall, this estimator can be considered "safe" and robust, as it performs reasonably well regardless of the true value of $\theta$.
+
+\newpage
+\textbf{Behavior of estimator (b) ($a=n/2, b=n/2$):}  
+
+This estimator illustrates an important trade-off in Bayesian estimation:
+
+\begin{itemize}
+    \item \textbf{When $\theta \approx 0.5$:}  
+    
+    The risk of this estimator is low and, importantly, lower than the risk of estimator (a). This occurs because the prior belief that $\theta$ is close to $0.5$ is consistent with the true parameter value.
+
+    \item \textbf{When $\theta \to 0$ or $\theta \to 1$:}  
+    
+    The risk of estimator (b) increases substantially, reaching values significantly higher than those of estimator (a). The prior information is sufficiently strong (especially for large $n$) to pull the estimator toward $0.5$, even when the observed data (for example $X=0$ or $X=n$) clearly suggest that $\theta$ is close to $0$ or $1$. As a consequence, the estimation error becomes large.
+\end{itemize}
+
+The choice between these estimators depends on the available prior knowledge. Estimator (a) is universal and robust, while estimator (b) represents a "high-risk, high-reward" strategy --- it performs optimally when the parameter $\theta$ is indeed close to $\frac{1}{2}$, but may perform very poorly when this assumption is incorrect.
+
+\section{Task 3}
+
+In the previous task, we analyzed the risk function $R(\theta, d_{a,b})$, which measures the cost of using the estimator $d_{a,b}$ for a fixed value of the parameter $\theta$. 
+
+In this task, we adopt a Bayesian perspective, where the parameter $\theta$ itself is treated as a random variable with a known prior distribution $\pi(\theta)$. Our prior knowledge before observing the data is described by the $\text{Beta}(\alpha,\beta)$ distribution.
+
+We define the \textbf{expected risk} (or \textbf{Bayesian risk}) as the expected value of the classical risk with respect to the prior distribution:
+\[
+r(\pi, d_{a,b}) = E_{\pi}\!\left[ R(\theta, d_{a,b}) \right]
+= \int_{0}^{1} R(\theta, d_{a,b}) \, \pi(\theta)\, d\theta,
+\]
+where
+\[
+\pi(\theta) = \frac{\theta^{\alpha-1}(1-\theta)^{\beta-1}}{B(\alpha,\beta)}
+\]
+is the density function of the $\text{Beta}(\alpha,\beta)$ distribution.
+
+The quantity $r(\pi, d_{a,b})$ is therefore a single numerical measure describing the overall quality of the estimator $d_{a,b}$ under the prior distribution $\pi$.
+
+The objective is to determine the values $a>0$ and $b>0$ that minimize the expected risk $r(\pi,d_{a,b})$ for a given prior distribution.
+
+\paragraph{Methodology}
+
+\begin{enumerate}
+    \item The function \texttt{r\_pi} implements the integral defining $r(\pi,d_{a,b})$, computed numerically using the \texttt{integrate} function.
+    
+    \item Since deriving the analytical minimum with respect to $a$ and $b$ is difficult, a two-step numerical optimization procedure was applied:
+    
+    \begin{itemize}
+        \item \textbf{Step 1:} The function \texttt{grid\_search\_ab} performs a global search over a grid of $(a,b)$ values in order to identify an approximate location of the global minimum.
+        
+        \item \textbf{Step 2:} The function \texttt{refine\_opt\_ab} uses the result obtained in the previous step as the starting point for the \texttt{optim} algorithm (Nelder--Mead method), which refines the parameter estimates more precisely.
+    \end{itemize}
+    
+    \item The procedure was repeated for $n \in \{5,20,100\}$ in order to investigate the influence of sample size on the obtained results.
+\end{enumerate}
+
+<<oczekiwane_ryzyko,echo=FALSE, results='hide',cache=TRUE>>=
+
+r_pi <- function(n, a, b, alpha = 1, beta = 1, rel.tol = 1e-6) {
+  integrand <- function(theta) {
+    sapply(theta, function(th) risk_entropy_da_b(n = n, theta = th, a = a, b = b)) *
+      dbeta(theta, alpha, beta)
+  }
+  
+  res <- try(integrate(integrand, lower = 0, upper = 1, rel.tol = rel.tol, 
+                       subdivisions = 200L), silent = TRUE)
+  res$value
+}
+
+grid_search_ab <- function(n, alpha = 1, beta = 1, 
+                           a_seq = seq(0.01, n, length.out = 40), 
+                           b_seq = seq(0.01, n, length.out = 40)) {
+  best_val <- Inf
+  best_ab <- c(NA, NA)
+  for (a in a_seq) {
+    for (b in b_seq) {
+      val <- r_pi(n, a, b, alpha, beta)
+      if (val < best_val) {
+        best_val <- val
+        best_ab <- c(a, b)
+      }
+    }
+  }
+  list(a = best_ab[1], b = best_ab[2], risk = best_val)
+}
+
+refine_opt_ab <- function(n, a0, b0, alpha = 1, beta = 1) {
+  fun_log <- function(par) {
+    a <- exp(par[1]); b <- exp(par[2])
+    r_pi(n, a, b, alpha, beta)
+  }
+  start <- log(c(a0, b0))
+  opt <- optim(start, fn = fun_log, method = "Nelder-Mead",
+               control = list(maxit = 500))
+  a_opt <- exp(opt$par[1]); b_opt <- exp(opt$par[2])
+  list(a = a_opt, b = b_opt, risk = opt$value, optim_result = opt)
+}
+
+find_optimal_ab <- function(n, alpha = 1, beta = 1,
+                            a_seq = seq(0.01, n, length.out = 40),
+                            b_seq = seq(0.01, n, length.out = 40)) {
+  grid <- grid_search_ab(n, alpha, beta, a_seq, b_seq)
+  refined <- refine_opt_ab(n, grid$a, grid$b, alpha, beta)
+  list(grid = grid, refined = refined)
+}
+
+n_values <- c(5, 20, 50)
+
+results <- lapply(n_values, function(n) {
+  res <- find_optimal_ab(n, alpha = 1, beta = 1,
+                         a_seq = seq(0.01, n, length.out = 40),
+                         b_seq = seq(0.01, n, length.out = 40))
+  risk_1_1 <- r_pi(n, 1, 1, 1, 1)
+  list(n = n, grid = res$grid, refined = res$refined, risk_a1b1 = risk_1_1)
+})
+@
+
+<<tabela-wynikow, echo=FALSE, results='asis'>>=
+library(xtable)
+
+results_df <- do.call(rbind, lapply(results, function(res) {
+  data.frame(
+    n = res$n,
+    a_opt = res$refined$a,
+    b_opt = res$refined$b,
+    risk_opt = res$refined$risk,
+    risk_a1b1 = res$risk_a1b1
+  )
+}))
+
+
+col_names <- c(
+  "$n$",
+  "$a_{opt}$",
+  "$b_{opt}$",
+  "Optimal risk $r(\\pi, d_{a,b})$",
+  "Base risk $r(\\pi, d_{1,1})$"
+)
+colnames(results_df) <- col_names
+
+xtable_obj <- xtable(
+  results_df,
+  caption = "Results of parameters optimazation $a$ i $b$ for $\\text{Beta}(1,1)$",
+  label = "tab:opt_results",
+  digits = c(0, 0, 5, 5, 8, 8) 
+)
+
+print(
+  xtable_obj,
+  include.rownames = FALSE,      
+  caption.placement = "top",     
+  
+  
+  sanitize.colnames.function = identity 
+)
+@
+
+The results of the numerical optimization are presented in Table~\ref{tab:opt_results}. 
+We can observe that the algorithm identifies the parameters $(a,b)$ very effectively. 
+Regardless of the sample size, the estimated values remain very close to the true optimal values.
+
+
+\end{document}
